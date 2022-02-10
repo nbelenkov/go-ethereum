@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/spy"
 )
 
 const (
@@ -123,6 +124,8 @@ type handler struct {
 	chainSync *chainSyncer
 	wg        sync.WaitGroup
 	peerWG    sync.WaitGroup
+
+	spy *spy.Spy
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -142,6 +145,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		merger:     config.Merger,
 		whitelist:  config.Whitelist,
 		quitSync:   make(chan struct{}),
+		spy:        spy.NewSpy(),
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
@@ -278,6 +282,9 @@ func newHandler(config *handlerConfig) (*handler, error) {
 // runEthPeer registers an eth peer into the joint eth/snap peerset, adds it to
 // various subsistems and starts handling messages.
 func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
+
+	h.spy.HandlePeerMsg(peer.ID(), peer.Version(), peer.RemoteAddr().String())
+
 	// If the peer has a `snap` extension, wait for it to connect so we can have
 	// a uniform initialization/teardown mechanism
 	snap, err := h.peers.waitSnapExtension(peer)
@@ -532,6 +539,8 @@ func (h *handler) Stop() {
 	// will exit when they try to register.
 	h.peers.close()
 	h.peerWG.Wait()
+
+	h.spy.Close()
 
 	log.Info("Ethereum protocol stopped")
 }
